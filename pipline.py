@@ -49,10 +49,10 @@ for p in project:
     import numpy as np
     def graph(connection):
         lenx = len(connection)
-        tmp = np.zeros((1001,1001),dtype='float16')
+        tmp = np.zeros((1001,1001),dtype='bool_')
         for i in range(lenx):
-            tmp[i][i]=1
-            tmp[i][connection[i]] = tmp[connection[i]][i] = 1
+            tmp[i][i]=True
+            tmp[i][connection[i]] = tmp[connection[i]][i] = True
         return tmp
     s['go'] = s['go'].apply(graph)
     s['gn'] = s['gn'].apply(graph)
