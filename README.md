@@ -2,10 +2,11 @@
 Turn Tree into Graph: Automatic Code Review via Simplified AST Driven Graph Convolutional Network
 
 
-Attention! For all the data, you need to free up at least 20GB of disk space.
+Attention! We modified the pipline.py, it didn't need large disk file. The graph generation is moved to the data_iter.py.
 
-this is part of the data. you may need to make some slight changes.
-you need to free up at least 17GB of disk space to execute the program 'pipline.py', and it will take a lot of time.
+for the gensim module, please make sure that the version is < 4.00.
+
+for SimAST-GCN, you can run the following commond.
 1. python pipline.py
 2. python SimAST-GCN.py
 

@@ -1,7 +1,10 @@
 from torch.utils.data import Dataset, DataLoader, Sampler
 import random,math
 import pandas as pd
+import numpy as np
 
+
+random.seed(20)
 
 #Dataset
 class MyClassBalanceDataset(Dataset):
@@ -13,6 +16,17 @@ class MyClassBalanceDataset(Dataset):
         go = []
         gn = []
         source = pd.read_pickle(root)
+        
+        def graph(connection):
+            lenx = len(connection)
+            tmp = np.zeros((1000,1000),dtype='bool_')
+            for i in range(lenx):
+                tmp[i][i]=True
+                tmp[i][connection[i]] = tmp[connection[i]][i] = True
+            return tmp
+        source['go'] = source['go'].apply(graph)
+        source['gn'] = source['gn'].apply(graph)
+
         self.len = len(source)
         self.label = source['label'].tolist()
         self.old = source['old'].tolist()
@@ -34,6 +48,7 @@ class MyClassBalanceDataset(Dataset):
 class MyBatchSampler(Sampler):
     def __init__(self, data_source, batch_size, class_weight):
         super(MyBatchSampler, self).__init__(data_source)
+        random.seed(20)
         self.data_source = data_source
         assert isinstance(class_weight, list)
         assert 1 - sum(class_weight) < 1e-5
@@ -98,6 +113,17 @@ class MyDataset(Dataset):
         go = []
         gn = []
         source = pd.read_pickle(file_path)
+
+        def graph(connection):
+            lenx = len(connection)
+            tmp = np.zeros((1000,1000),dtype='bool_')
+            for i in range(lenx):
+                tmp[i][i]=True
+                tmp[i][connection[i]] = tmp[connection[i]][i] = True
+            return tmp
+        source['go'] = source['go'].apply(graph)
+        source['gn'] = source['gn'].apply(graph)
+
         self.len = len(source)
         self.label = source['label'].tolist()
         self.old = source['old'].tolist()

@@ -26,19 +26,21 @@ from data_iter import MyClassBalanceDataset,MyBatchSampler,MyDataset
 warnings.filterwarnings('ignore')
 
 
-def setup_seed(seed):
-     torch.manual_seed(seed)
-     torch.cuda.manual_seed_all(seed)
-     np.random.seed(seed)
-     random.seed(seed)
-     torch.backends.cudnn.deterministic = True
+def set_seed(seed=42):
+    random.seed(seed)
+    os.environ['PYHTONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
 # 设置随机数种子
-setup_seed(20)
+set_seed(42)
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')
 
 
 #Module
@@ -56,15 +58,34 @@ class GraphConvolution(nn.Module):
             #nn.init.xavier_uniform_(self.bias.data, gain=1.414)
         else:
             self.register_parameter('bias', None)
+        self.batch_norm = nn.BatchNorm1d(1000)#fixed
 
     def forward(self, text, adj):
+        #print(text.shape,adj.shape,self.weight.shape)
         hidden = torch.matmul(text, self.weight)
         denom = torch.sum(adj, dim=2, keepdim=True) + 1
-        output = torch.matmul(adj, hidden) / denom
+        #print(hidden.shape,denom.shape)
+        output = torch.matmul(adj, hidden)
+        output = output / denom
         if self.bias is not None:
-            return output + self.bias
+            return self.batch_norm(output + self.bias)
         else:
-            return output
+            return self.batch_norm(output)
+
+class GC(nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        super(GC, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.W_at = nn.Linear(in_features, out_features)
+        self.U_at_1 = nn.Linear(in_features, out_features)
+
+    def forward(self, text, adj):
+        denom = adj.sum(2).unsqueeze(2)+1
+        att = adj.bmm(text)
+        att = att / denom
+        forg = torch.sigmoid(self.W_at(att)+self.U_at_1(text))
+
 
 class CIAN(nn.Module):
     def __init__(self, weights, vocab_size, gcnn):
@@ -75,64 +96,46 @@ class CIAN(nn.Module):
         #print('weights: ',weights)
         self.embedding.weight.data.copy_(weights)
         #self.embedding = nn.Embedding.from_pretrained(weights,freeze=True)
-        self.bigru1 = nn.GRU(self.embedding_size,self.hidden_size,num_layers=1,bidirectional=True)  #,batch_first=True
-        self.bigru2 = nn.GRU(self.embedding_size,self.hidden_size,num_layers=1,bidirectional=True)
+        self.bigru1 = nn.GRU(self.embedding_size,self.hidden_size,num_layers=1,bidirectional=True,batch_first=True)  #,batch_first=True  ,batch_first=True
+        #self.bigru2 = nn.GRU(self.embedding_size,self.hidden_size,num_layers=1,bidirectional=True,batch_first=True)
 
         self.gc1 = nn.ModuleList([GraphConvolution(2*self.hidden_size,2*self.hidden_size) for i in range(gcnn)])
 
-        self.gc3 = nn.ModuleList([GraphConvolution(2*self.hidden_size,2*self.hidden_size) for i in range(gcnn)])
+        #self.gc2 = nn.ModuleList([GraphConvolution(2*self.hidden_size,2*self.hidden_size) for i in range(gcnn)])
 
         #self.gc1 = GraphConvolution(2*self.hidden_size, 2*self.hidden_size)
         #self.gc2 = GraphConvolution(2*self.hidden_size, 2*self.hidden_size)
         #self.gc3 = GraphConvolution(2*self.hidden_size, 2*self.hidden_size)
         #self.gc4 = GraphConvolution(2*self.hidden_size, 2*self.hidden_size)
-        self.fc1 = nn.Linear(in_features = 4*self.hidden_size,out_features = self.hidden_size)
+        self.fc1 = nn.Linear(in_features = 2*self.hidden_size,out_features = self.hidden_size)
         self.fc2 = nn.Linear(in_features = self.hidden_size,out_features = 150)
         self.fc3 = nn.Linear(in_features = 150,out_features = 2)
-        #self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.3)
     
     def forward(self, old, go, new, gn):
-        #print(old)
+        #print(old.shape)
         eo = self.embedding(old)
         en = self.embedding(new)
-        #print('embedding: ',eo)
-        #print(eo.shape)
+
         #eo = self.dropout(eo)
         #en = self.dropout(en)
         oo,_ = self.bigru1(eo)
         on,_ = self.bigru1(en)
+
+        #oo = oo.permute(1,0,2)
+        #on = on.permute(1,0,2)
         #print(oo.shape)
-        oo = oo.permute(1,0,2)
-        on = on.permute(1,0,2)
 
         o = oo
         for gcn in self.gc1:
-            o = F.relu(gcn(o,go))
+            o = F.leaky_relu(gcn(o,go))
 
         n = on
-        for gcn in self.gc3:
-            n = F.relu(gcn(n,go))
+        for gcn in self.gc1:
+            n = F.leaky_relu(gcn(n,go))
 
-        #o = F.relu(self.gc1(oo, go))
-        #o = F.relu(self.gc2(o, go))
-        #o = F.relu(self.gc3(o, go))
-        #print(o)
-        #o = F.relu(self.gc4(o, go))
-        #n = F.relu(self.gc3(on, gn))
-        #n = F.relu(self.gc3(n, gn))
-        #n = F.relu(self.gc4(n, gn))
-        #print(o.sum(),n.sum())
-        #o = o.permute(0,2,1)
-        #n = n.permute(0,2,1)
-        #old_avg =  F.max_pool1d(o,o.size(2)).squeeze(2)
-        #new_avg =  F.max_pool1d(n,n.size(2)).squeeze(2)
-        #abs_dist = torch.abs(torch.add(old_avg,-new_avg))
-        #print(o.shape,oo.transpose(1, 2).shape)
-        #print(o.shape,oo.shape,oo.transpose(1, 2).shape)
         alpha_mat = torch.matmul(o, oo.transpose(1, 2))
-        #print(alpha_mat.shape)
         alpha = F.softmax(alpha_mat.sum(1, keepdim=True), dim=2)
-        #print(alpha.shape)
 
         beta_mat = torch.matmul(n, on.transpose(1, 2))
         beta = F.softmax(beta_mat.sum(1, keepdim=True), dim=2)
@@ -140,10 +143,10 @@ class CIAN(nn.Module):
         o = torch.matmul(alpha, oo).squeeze(1)
         #print(o.shape)
         n = torch.matmul(beta, on).squeeze(1)
-        o = F.normalize(o, p=2, dim=1)
-        n = F.normalize(n, p=2, dim=1)
-        #abs_dist = torch.abs(torch.add(o,-n))
-        abs_dist = torch.cat([o,n],1)
+        #o = F.normalize(o, p=2, dim=1)
+        #n = F.normalize(n, p=2, dim=1)
+        abs_dist = torch.abs(torch.add(o,-n))
+        #abs_dist = torch.cat([o,n],1)
         #print(abs_dist)
         ot = F.relu(self.fc1(abs_dist))
         ot = F.relu(self.fc2(ot))
@@ -165,12 +168,13 @@ class CIAN(nn.Module):
         
 
 def cian(p,gcnn):
-    setup_seed(20)
+    set_seed(42)
     ot = []
-    train_path = './data/'+p+'/test.pkl'
+    train_path = './data/'+p+'/train.pkl'
     test_path = './data/'+p+'/test.pkl'
     valid_path = './data/'+p+'/dev.pkl'
-    train_dataset = MyClassBalanceDataset(train_path)
+    #train_dataset = MyClassBalanceDataset(train_path)
+    train_dataset = MyDataset(train_path)
     test_dataset = MyDataset(test_path)
     #valid_dataset = MyDataset(valid_path)
 
@@ -183,20 +187,20 @@ def cian(p,gcnn):
     train_sp = WeightedRandomSampler(weights = train_sample, num_samples = len(train_sample))
 '''
 
-    batch_size = 64
+    batch_size = 128
 
-    tr = np.bincount(train_dataset.label)
-    cn = tr.tolist()
-    cc = [cn[0]/sum(cn),cn[1]/sum(cn)]
-    batchSampler = MyBatchSampler(train_dataset, batch_size, cc)
-    train_loader = DataLoader(train_dataset,batch_sampler = batchSampler)
+    #tr = np.bincount(train_dataset.label)
+    #cn = tr.tolist()
+    #cc = [cn[0]/sum(cn),cn[1]/sum(cn)]
+    #batchSampler = MyBatchSampler(train_dataset, batch_size, cc)
 
+    #train_loader = DataLoader(train_dataset,batch_sampler = batchSampler)
+    train_loader = DataLoader(dataset = train_dataset,batch_size = batch_size,shuffle = True)
     #train_loader = DataLoader(dataset = train_dataset,sampler = train_sp, batch_size = batch_size, shuffle = False)  #over sample
     #train_loader = DataLoader(dataset = train_dataset,batch_size = batch_size,shuffle = True)
     test_loader = DataLoader(dataset = test_dataset,batch_size = batch_size,shuffle = False)
     #valid_loader = DataLoader(dataset = valid_dataset,batch_size = batch_size,shuffle = False)
 
-    input_size = 300
     epochs = 100
     #learning_rate = 0.0002
 
@@ -224,12 +228,12 @@ def cian(p,gcnn):
     class_weight = 'balanced'
     classes = np.array([0,1])
     weight = compute_class_weight(class_weight = class_weight,classes = classes, y = l)
-    criterion = nn.CrossEntropyLoss(weight = torch.from_numpy(weight).float().cuda())
+    criterion = nn.CrossEntropyLoss(weight = torch.from_numpy(weight).float().cuda())  #
     
     #criterion = nn.CrossEntropyLoss()
-    #optimizer = torch.optim.Adamax(model.parameters()) #, lr=learning_rate
-    optimizer = torch.optim.Adam(model.parameters(),lr=0.0001,weight_decay=0.00001)#weight_decay=0.00001  #adamax 0.0002
-    #optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.6, weight_decay=0.00001)
+    #optimizer = torch.optim.Adamax(model.parameters()) #, lr=learning_rate  ,weight_decay=0.00001
+    optimizer = torch.optim.Adam(model.parameters(),lr=0.001,weight_decay=0.00001)#weight_decay=0.00001  #adamax 0.0002
+    #optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.00001)
 
     #cal time
     tm = 0
@@ -256,12 +260,14 @@ def cian(p,gcnn):
             label = label.to(device)
             go = go.to(device).float()
             gn = gn.to(device).float()
-            old = torch.tensor([item.cpu().detach().numpy() for item in old]).to(device).int()
-            new = torch.tensor([item.cpu().detach().numpy() for item in new]).to(device).int()
+            old = old.to(device).int()
+            new = new.to(device).int()
+            #new = torch.tensor([item.cpu().detach().numpy() for item in new]).to(device).int()
             sta = time.time()
             ta+=(sta-stz)#data load time
             # Forward pass
             outputs = model(old,go,new,gn)
+            #print(outputs.cpu())
             loss = criterion(outputs,label)
             stb = time.time()
             tb+=(stb-sta)#forward time
@@ -299,8 +305,8 @@ def cian(p,gcnn):
                 label = label.to(device)
                 go = go.to(device).float()
                 gn = gn.to(device).float()
-                old = torch.tensor([item.cpu().detach().numpy() for item in old]).to(device).int()
-                new = torch.tensor([item.cpu().detach().numpy() for item in new]).to(device).int()
+                old = old.to(device).int()
+                new = new.to(device).int()
                 outputs = model(old,go,new,gn)
                 loss = criterion(outputs,label)
                 __, predicted = torch.max(outputs.data, 1)
@@ -401,7 +407,7 @@ if __name__ == '__main__':
                         filemode='a',
                         format='%(asctime)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
-    setup_seed(20)
+    set_seed(42)
     #p = 'accumulo'
     out = cian(project,int(gcnn))
 
@@ -419,7 +425,7 @@ if __name__ == '__main__':
     file_path = './rerun/SimASTGCN_'+project+'_'+gcnn+'.xlsx'
 
     out[0][0]=project
-    out[0][1]='SimAsTGCN'
+    out[0][1]='SimASTGCN'
     for row in out:
         ws.append(row)
     wb.save(file_path)
