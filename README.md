@@ -1,5 +1,6 @@
-# Turn-Tree-into-Graph-Automatic-Code-Review-via-Simplified-AST-Driven-Graph-Convolutional-Network
-Turn Tree into Graph: Automatic Code Review via Simplified AST Driven Graph Convolutional Network
+# SimAST-GCN
+
+![image](https://user-images.githubusercontent.com/93702668/147535219-77a55fc0-bb50-4466-9a9d-41c26fcb2ae6.png)
 
 
 Attention! We modified the pipline.py, it didn't need large disk file. The graph generation is moved to the data_iter.py.
