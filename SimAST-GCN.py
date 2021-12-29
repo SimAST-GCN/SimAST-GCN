@@ -58,7 +58,15 @@ class GraphConvolution(nn.Module):
             #nn.init.xavier_uniform_(self.bias.data, gain=1.414)
         else:
             self.register_parameter('bias', None)
-        self.batch_norm = nn.BatchNorm1d(1000)#fixed
+        self.reset_parameter()
+        self.batch_norm = nn.BatchNorm1d(1000) #fixed, corresponding to the max len of the token
+
+    def reset_parameter(self):
+        torch.nn.init.kaiming_uniform_(self.weight, a = math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1/math.sqrt(fan_in)
+            torch.nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, text, adj):
         #print(text.shape,adj.shape,self.weight.shape)
