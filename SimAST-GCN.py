@@ -26,17 +26,6 @@ from data_iter import MyClassBalanceDataset,MyBatchSampler,MyDataset
 warnings.filterwarnings('ignore')
 
 
-def set_seed(seed=42):
-    random.seed(seed)
-    os.environ['PYHTONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-# 设置随机数种子
-set_seed(42)
-
-
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -176,7 +165,6 @@ class CIAN(nn.Module):
         
 
 def cian(p,gcnn):
-    set_seed(42)
     ot = []
     train_path = './data/'+p+'/train.pkl'
     test_path = './data/'+p+'/test.pkl'
@@ -415,7 +403,6 @@ if __name__ == '__main__':
                         filemode='a',
                         format='%(asctime)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
-    set_seed(42)
     #p = 'accumulo'
     out = cian(project,int(gcnn))
 
