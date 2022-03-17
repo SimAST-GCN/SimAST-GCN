@@ -10,6 +10,10 @@ for the gensim module, please make sure that the version is < 4.00.
 #### I noticed that the data had some problem. So I offer another link.
 https://drive.google.com/file/d/1GFHZJQVztnk4XYkan7llEZDa-t_N2sQb/view?usp=sharing
 
+I offer another dataset with text information, which is larger and less mistake, in another link.
+
+https://github.com/SimAST-GCN/CLMN
+
 ---
 
 ### for SimAST-GCN, you can run the following commond.
